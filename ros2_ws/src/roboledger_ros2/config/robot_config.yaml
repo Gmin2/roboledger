@@ -1,0 +1,22 @@
+hedera:
+  network: testnet
+  topics:
+    tasks: "0.0.XXXXX"
+    bids: "0.0.XXXXX"
+    proofs: "0.0.XXXXX"
+  contract_id: "0.0.XXXXX"
+  nft_token_id: "0.0.XXXXX"
+
+robot:
+  account_id: "0.0.XXXXX"
+  key_path: "~/.roboledger/robot.key"
+  capabilities:
+    - delivery
+    - outdoor
+  nft_serial: 1
+
+bridge:
+  proof_interval_seconds: 10
+  retry_attempts: 3
+  retry_delay_seconds: 5
+  cli_base_path: "../../packages/cli"

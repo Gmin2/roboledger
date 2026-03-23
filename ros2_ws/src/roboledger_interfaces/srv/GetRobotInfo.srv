@@ -1,0 +1,9 @@
+# Request robot info from mirror node.
+string account_id
+---
+string account_id
+string balance_hbar
+string nft_serial
+bool kyc_granted
+bool success
+string error
