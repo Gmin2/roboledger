@@ -21,12 +21,14 @@ library TaskTypes {
     }
 
     /// @notice On-chain representation of a single task.
-    /// @param client    Address that created and funded the task.
-    /// @param robot     Address assigned to execute the task (zero when unassigned).
-    /// @param reward    HBAR amount locked as payment (in wei/tinybar).
-    /// @param deadline  Unix timestamp beyond which the task is refundable.
-    /// @param proofHash Keccak-256 digest of the off-chain completion proof.
-    /// @param status    Current lifecycle state.
+    /// @param client              Address that created and funded the task.
+    /// @param robot               Address assigned to execute the task (zero when unassigned).
+    /// @param reward              HBAR amount locked as payment (in wei/tinybar).
+    /// @param deadline            Unix timestamp beyond which the task is refundable.
+    /// @param proofHash           Keccak-256 digest of the off-chain completion proof.
+    /// @param status              Current lifecycle state.
+    /// @param requiredValidations Number of validator approvals needed before settlement.
+    /// @param receivedValidations Number of validator approvals received so far.
     struct Task {
         address client;
         address robot;
@@ -34,5 +36,7 @@ library TaskTypes {
         uint256 deadline;
         bytes32 proofHash;
         Status status;
+        uint8 requiredValidations;
+        uint8 receivedValidations;
     }
 }

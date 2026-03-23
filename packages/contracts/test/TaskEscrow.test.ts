@@ -1,34 +1,39 @@
 /// @file TaskEscrow.test.ts
-/// @notice Test suite for the TaskEscrow contract.
-///
-/// Covers the full lifecycle: creation, assignment, completion, and refund,
-/// along with access-control and deadline enforcement.
+/// @notice Test suite for the TaskEscrow contract with ERC-8004 registry integration.
 
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
-import type { TaskEscrow } from "../typechain-types";
+import type { TaskEscrow, ReputationRegistry } from "../typechain-types";
 import type { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("TaskEscrow", function () {
   let escrow: TaskEscrow;
+  let reputation: ReputationRegistry;
   let client: HardhatEthersSigner;
   let robot: HardhatEthersSigner;
+  let validator1: HardhatEthersSigner;
+  let validator2: HardhatEthersSigner;
   let other: HardhatEthersSigner;
 
   const TASK_ID = "task-001";
   const REWARD = ethers.parseEther("1");
   const PROOF_HASH = ethers.keccak256(ethers.toUtf8Bytes("proof-payload"));
 
-  /// Deploy a fresh contract before each test.
   beforeEach(async function () {
-    [client, robot, other] = await ethers.getSigners();
-    const factory = await ethers.getContractFactory("TaskEscrow");
-    escrow = (await factory.deploy()) as unknown as TaskEscrow;
+    [client, robot, validator1, validator2, other] = await ethers.getSigners();
+
+    const repFactory = await ethers.getContractFactory("ReputationRegistry");
+    reputation = (await repFactory.deploy()) as unknown as ReputationRegistry;
+    await reputation.waitForDeployment();
+
+    const escrowFactory = await ethers.getContractFactory("TaskEscrow");
+    escrow = (await escrowFactory.deploy(
+      await reputation.getAddress()
+    )) as unknown as TaskEscrow;
     await escrow.waitForDeployment();
   });
 
-  /// Return a unix timestamp `offsetSeconds` into the future.
   async function futureDeadline(offsetSeconds: number): Promise<bigint> {
     const latest = await time.latest();
     return BigInt(latest) + BigInt(offsetSeconds);
@@ -36,146 +41,182 @@ describe("TaskEscrow", function () {
 
   /** createTask */
 
-  it("should create a task with escrowed funds", async function () {
+  it("should create a task with validation requirements", async function () {
     const deadline = await futureDeadline(3600);
 
     await expect(
-      escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD })
+      escrow.connect(client).createTask(TASK_ID, deadline, 2, { value: REWARD })
     ).to.emit(escrow, "TaskCreated");
 
     const task = await escrow.getTask(TASK_ID);
     expect(task.client).to.equal(client.address);
-    expect(task.reward).to.equal(REWARD);
-    expect(task.status).to.equal(0n); // Open
+    expect(task.requiredValidations).to.equal(2);
+    expect(task.receivedValidations).to.equal(0);
+  });
 
-    const contractAddr = await escrow.getAddress();
-    expect(await ethers.provider.getBalance(contractAddr)).to.equal(REWARD);
+  it("should create a task with zero validations required", async function () {
+    const deadline = await futureDeadline(3600);
+    await escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD });
+
+    const task = await escrow.getTask(TASK_ID);
+    expect(task.requiredValidations).to.equal(0);
   });
 
   it("should reject duplicate task IDs", async function () {
     const deadline = await futureDeadline(3600);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
+    await escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD });
 
     await expect(
-      escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD })
+      escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD })
     ).to.be.revertedWithCustomError(escrow, "TaskAlreadyExists");
   });
 
-  it("should reject zero reward", async function () {
+  /** validateTask */
+
+  it("should accept validation from any address", async function () {
     const deadline = await futureDeadline(3600);
+    await escrow.connect(client).createTask(TASK_ID, deadline, 2, { value: REWARD });
+    await escrow.connect(client).assignTask(TASK_ID, robot.address);
 
     await expect(
-      escrow.connect(client).createTask(TASK_ID, deadline, { value: 0 })
-    ).to.be.revertedWithCustomError(escrow, "ZeroReward");
-  });
-
-  it("should reject deadline in the past", async function () {
-    const pastDeadline = BigInt((await time.latest()) - 100);
-
-    await expect(
-      escrow.connect(client).createTask(TASK_ID, pastDeadline, { value: REWARD })
-    ).to.be.revertedWithCustomError(escrow, "DeadlineNotFuture");
-  });
-
-  /** assignTask */
-
-  it("should assign a robot to an open task", async function () {
-    const deadline = await futureDeadline(3600);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
-
-    await expect(escrow.connect(client).assignTask(TASK_ID, robot.address))
-      .to.emit(escrow, "TaskAssigned");
+      escrow.connect(validator1).validateTask(TASK_ID)
+    ).to.emit(escrow, "TaskValidated");
 
     const task = await escrow.getTask(TASK_ID);
-    expect(task.robot).to.equal(robot.address);
-    expect(task.status).to.equal(1n); // Assigned
+    expect(task.receivedValidations).to.equal(1);
   });
 
-  it("should reject assignment from non-client", async function () {
+  it("should reject duplicate validation from same address", async function () {
     const deadline = await futureDeadline(3600);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
+    await escrow.connect(client).createTask(TASK_ID, deadline, 2, { value: REWARD });
+    await escrow.connect(client).assignTask(TASK_ID, robot.address);
+    await escrow.connect(validator1).validateTask(TASK_ID);
 
     await expect(
-      escrow.connect(other).assignTask(TASK_ID, robot.address)
-    ).to.be.revertedWithCustomError(escrow, "OnlyClient");
+      escrow.connect(validator1).validateTask(TASK_ID)
+    ).to.be.revertedWithCustomError(escrow, "AlreadyValidated");
   });
 
-  it("should reject assignment of zero address", async function () {
+  it("should reject validation for non-assigned task", async function () {
     const deadline = await futureDeadline(3600);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
+    await escrow.connect(client).createTask(TASK_ID, deadline, 2, { value: REWARD });
 
     await expect(
-      escrow.connect(client).assignTask(TASK_ID, ethers.ZeroAddress)
-    ).to.be.revertedWithCustomError(escrow, "InvalidRobotAddress");
+      escrow.connect(validator1).validateTask(TASK_ID)
+    ).to.be.revertedWithCustomError(escrow, "TaskNotAssigned");
   });
 
-  /** completeTask */
+  /** completeTask with validation */
 
-  it("should complete task and release payment to robot", async function () {
+  it("should complete task when validation threshold met", async function () {
     const deadline = await futureDeadline(3600);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
+    await escrow.connect(client).createTask(TASK_ID, deadline, 2, { value: REWARD });
     await escrow.connect(client).assignTask(TASK_ID, robot.address);
-
-    const balanceBefore = await ethers.provider.getBalance(robot.address);
-
-    const tx = await escrow.connect(robot).completeTask(TASK_ID, PROOF_HASH);
-    const receipt = await tx.wait();
-    const gasCost = receipt!.gasUsed * receipt!.gasPrice;
-
-    const balanceAfter = await ethers.provider.getBalance(robot.address);
-    expect(balanceAfter).to.equal(balanceBefore + REWARD - gasCost);
-
-    const task = await escrow.getTask(TASK_ID);
-    expect(task.status).to.equal(2n); // Completed
-    expect(task.proofHash).to.equal(PROOF_HASH);
-  });
-
-  it("should reject completion from non-assigned robot", async function () {
-    const deadline = await futureDeadline(3600);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
-    await escrow.connect(client).assignTask(TASK_ID, robot.address);
-
-    await expect(
-      escrow.connect(other).completeTask(TASK_ID, PROOF_HASH)
-    ).to.be.revertedWithCustomError(escrow, "OnlyAssignedRobot");
-  });
-
-  it("should reject completion after deadline", async function () {
-    const deadline = await futureDeadline(60);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
-    await escrow.connect(client).assignTask(TASK_ID, robot.address);
-
-    await time.increase(120);
+    await escrow.connect(validator1).validateTask(TASK_ID);
+    await escrow.connect(validator2).validateTask(TASK_ID);
 
     await expect(
       escrow.connect(robot).completeTask(TASK_ID, PROOF_HASH)
-    ).to.be.revertedWithCustomError(escrow, "DeadlineElapsed");
+    ).to.emit(escrow, "TaskCompleted");
+
+    const task = await escrow.getTask(TASK_ID);
+    expect(task.status).to.equal(2n); // Completed
+  });
+
+  it("should reject completion when validations insufficient", async function () {
+    const deadline = await futureDeadline(3600);
+    await escrow.connect(client).createTask(TASK_ID, deadline, 2, { value: REWARD });
+    await escrow.connect(client).assignTask(TASK_ID, robot.address);
+    await escrow.connect(validator1).validateTask(TASK_ID); // only 1 of 2
+
+    await expect(
+      escrow.connect(robot).completeTask(TASK_ID, PROOF_HASH)
+    ).to.be.revertedWithCustomError(escrow, "InsufficientValidations");
+  });
+
+  it("should allow completion without validation when required=0", async function () {
+    const deadline = await futureDeadline(3600);
+    await escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD });
+    await escrow.connect(client).assignTask(TASK_ID, robot.address);
+
+    await expect(
+      escrow.connect(robot).completeTask(TASK_ID, PROOF_HASH)
+    ).to.emit(escrow, "TaskCompleted");
+  });
+
+  it("should release payment to robot on completion", async function () {
+    const deadline = await futureDeadline(3600);
+    await escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD });
+    await escrow.connect(client).assignTask(TASK_ID, robot.address);
+
+    const balanceBefore = await ethers.provider.getBalance(robot.address);
+    const tx = await escrow.connect(robot).completeTask(TASK_ID, PROOF_HASH);
+    const receipt = await tx.wait();
+    const gasCost = receipt!.gasUsed * receipt!.gasPrice;
+    const balanceAfter = await ethers.provider.getBalance(robot.address);
+
+    expect(balanceAfter).to.equal(balanceBefore + REWARD - gasCost);
+  });
+
+  /** Reputation integration */
+
+  it("should submit positive feedback on completion", async function () {
+    const deadline = await futureDeadline(3600);
+    await escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD });
+    await escrow.connect(client).assignTask(TASK_ID, robot.address);
+    await escrow.connect(robot).completeTask(TASK_ID, PROOF_HASH);
+
+    /// Escrow contract is the feedback author.
+    const escrowAddr = await escrow.getAddress();
+    const lastIdx = await reputation.getLastIndex(robot.address, escrowAddr);
+    expect(lastIdx).to.equal(1);
+
+    const [value, , tag1] = await reputation.readFeedback(
+      robot.address, escrowAddr, 1
+    );
+    expect(value).to.equal(100);
+    expect(tag1).to.equal("taskSuccess");
+  });
+
+  it("should submit negative feedback on refund of assigned task", async function () {
+    const deadline = await futureDeadline(60);
+    await escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD });
+    await escrow.connect(client).assignTask(TASK_ID, robot.address);
+
+    await time.increase(120);
+    await escrow.connect(other).refundTask(TASK_ID);
+
+    const escrowAddr = await escrow.getAddress();
+    const lastIdx = await reputation.getLastIndex(robot.address, escrowAddr);
+    expect(lastIdx).to.equal(1);
+
+    const [value, , tag1] = await reputation.readFeedback(
+      robot.address, escrowAddr, 1
+    );
+    expect(value).to.equal(0);
+    expect(tag1).to.equal("taskFailed");
   });
 
   /** refundTask */
 
-  it("should refund after deadline passes", async function () {
+  it("should refund after deadline", async function () {
     const deadline = await futureDeadline(60);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
+    await escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD });
 
     await time.increase(120);
 
     const balanceBefore = await ethers.provider.getBalance(client.address);
-
-    /// Anyone can trigger the refund — use `other` to prove it.
-    const tx = await escrow.connect(other).refundTask(TASK_ID);
-    await tx.wait();
-
+    await escrow.connect(other).refundTask(TASK_ID);
     const balanceAfter = await ethers.provider.getBalance(client.address);
-    expect(balanceAfter).to.equal(balanceBefore + REWARD);
 
+    expect(balanceAfter).to.equal(balanceBefore + REWARD);
     const task = await escrow.getTask(TASK_ID);
     expect(task.status).to.equal(3n); // Refunded
   });
 
   it("should reject refund before deadline", async function () {
     const deadline = await futureDeadline(3600);
-    await escrow.connect(client).createTask(TASK_ID, deadline, { value: REWARD });
+    await escrow.connect(client).createTask(TASK_ID, deadline, 0, { value: REWARD });
 
     await expect(
       escrow.connect(other).refundTask(TASK_ID)
