@@ -139,6 +139,6 @@ class RoboLedgerConfig:
         """
         base = Path(self.cli_base_path)
         if base.is_absolute():
-            return str(base / "dist" / "index.js")
+            return str(base / "dist" / "cli.js")
         resolved = (self._path.parent / base).resolve()
-        return str(resolved / "dist" / "index.js")
+        return str(resolved / "dist" / "cli.js")

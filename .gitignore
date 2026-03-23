@@ -9,7 +9,10 @@ artifacts/
 cache/
 typechain-types/
 
-# ROS2
+# Secrets — config with inline keys
+ros2_ws/src/roboledger_ros2/config/robot_config.yaml
+
+# ROS2 build artifacts
 ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
