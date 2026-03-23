@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+coverage/
+.turbo/
+artifacts/
+cache/
+typechain-types/
+
+# ROS2
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
