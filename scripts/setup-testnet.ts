@@ -66,7 +66,7 @@ function buildClient(): Client {
   const client = Client.forTestnet();
   client.setOperator(
     AccountId.fromString(operatorId),
-    PrivateKey.fromStringED25519(operatorKey)
+    PrivateKey.fromStringECDSA(operatorKey)
   );
   return client;
 }
@@ -101,7 +101,7 @@ function updateEnvFile(entries: Record<string, string>): void {
 async function main(): Promise<void> {
   const client = buildClient();
   const operatorId = AccountId.fromString(process.env.OPERATOR_ID!);
-  const operatorKey = PrivateKey.fromStringED25519(process.env.OPERATOR_KEY!);
+  const operatorKey = PrivateKey.fromStringECDSA(process.env.OPERATOR_KEY!);
   const envUpdates: Record<string, string> = {};
 
   try {
@@ -206,7 +206,16 @@ async function main(): Promise<void> {
       .setMetadataKey(metadataKey.publicKey)
       .freezeWith(client);
 
-    const tokenResponse = await tokenTx.execute(client);
+    /** Sign with all role keys — Hedera requires each key holder to sign. */
+    const tokenSigned = await (
+      await (
+        await (
+          await tokenTx.sign(supplyKey)
+        ).sign(kycKey)
+      ).sign(freezeKey)
+    ).sign(metadataKey);
+
+    const tokenResponse = await tokenSigned.execute(client);
     const tokenReceipt = await tokenResponse.getReceipt(client);
     const tokenId = tokenReceipt.tokenId!;
 
@@ -264,9 +273,25 @@ async function main(): Promise<void> {
     }
 
     /* -------------------------------------------------------------- */
-    /*  Step 9: Transfer NFTs to robot accounts                       */
+    /*  Step 9: Grant KYC to all robot accounts                       */
     /* -------------------------------------------------------------- */
-    console.log("\nStep 9: Transferring NFTs to robot accounts...");
+    console.log("\nStep 9: Granting KYC to robot accounts...");
+    for (let i = 0; i < 3; i++) {
+      const kycTx = new TokenGrantKycTransaction()
+        .setAccountId(robotAccountIds[i])
+        .setTokenId(tokenId)
+        .freezeWith(client);
+
+      const signedKycTx = await kycTx.sign(kycKey);
+      const kycResponse = await signedKycTx.execute(client);
+      await kycResponse.getReceipt(client);
+      console.log(`  KYC granted to Robot ${i + 1} (${robotAccountIds[i].toString()})`);
+    }
+
+    /* -------------------------------------------------------------- */
+    /*  Step 10: Transfer NFTs to robot accounts                      */
+    /* -------------------------------------------------------------- */
+    console.log("\nStep 10: Transferring NFTs to robot accounts...");
     for (let i = 0; i < 3; i++) {
       const nftId = new NftId(tokenId, serialNumbers[i]);
       const transferTx = new TransferTransaction()
@@ -278,22 +303,6 @@ async function main(): Promise<void> {
       console.log(
         `  NFT serial ${serialNumbers[i]} -> Robot ${i + 1} (${robotAccountIds[i].toString()})`
       );
-    }
-
-    /* -------------------------------------------------------------- */
-    /*  Step 10: Grant KYC to all robot accounts                      */
-    /* -------------------------------------------------------------- */
-    console.log("\nStep 10: Granting KYC to robot accounts...");
-    for (let i = 0; i < 3; i++) {
-      const kycTx = new TokenGrantKycTransaction()
-        .setAccountId(robotAccountIds[i])
-        .setTokenId(tokenId)
-        .freezeWith(client);
-
-      const signedKycTx = await kycTx.sign(kycKey);
-      const kycResponse = await signedKycTx.execute(client);
-      await kycResponse.getReceipt(client);
-      console.log(`  KYC granted to Robot ${i + 1} (${robotAccountIds[i].toString()})`);
     }
 
     /* -------------------------------------------------------------- */

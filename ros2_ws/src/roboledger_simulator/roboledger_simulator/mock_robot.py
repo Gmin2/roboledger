@@ -19,6 +19,8 @@ class MockRobot(Node):
 
     def __init__(self) -> None:
         """Declare parameters, create publishers, and start the 1 Hz timer."""
+        super().__init__("mock_robot")
+
         self.declare_parameter("robot_id", "robot_1")
         self.declare_parameter("start_lat", 37.77)
         self.declare_parameter("start_lng", -122.42)
@@ -27,7 +29,6 @@ class MockRobot(Node):
         self.declare_parameter("speed", 0.001)
 
         robot_id: str = self.get_parameter("robot_id").value
-        super().__init__(f"mock_robot_{robot_id}")
 
         self._robot_id = robot_id
         self._start_lat: float = self.get_parameter("start_lat").value

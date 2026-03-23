@@ -21,13 +21,14 @@ class TaskExecutor(Node):
 
     def __init__(self) -> None:
         """Declare parameters, create publishers/subscribers, and initialize state."""
+        super().__init__("task_executor")
+
         self.declare_parameter("robot_id", "robot_1")
         self.declare_parameter("capabilities", ["delivery", "outdoor"])
         self.declare_parameter("robot_account_id", "")
         self.declare_parameter("nft_serial", 1)
 
         robot_id: str = self.get_parameter("robot_id").value
-        super().__init__(f"task_executor_{robot_id}")
 
         self._robot_id = robot_id
         self._capabilities: list[str] = list(

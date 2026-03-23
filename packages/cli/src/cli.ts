@@ -56,7 +56,7 @@ function buildClient(): Client {
   const client = Client.forTestnet();
   client.setOperator(
     AccountId.fromString(operatorId),
-    PrivateKey.fromStringED25519(operatorKey)
+    PrivateKey.fromStringECDSA(operatorKey)
   );
   return client;
 }
