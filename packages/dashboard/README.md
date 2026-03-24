@@ -1,75 +1,41 @@
-# React + TypeScript + Vite
+# RoboLedger Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React/Vite web dashboard with live Hedera testnet data and architecture presentation.
 
-Currently, two official plugins are available:
+## Pages
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Route | Page | Data Source |
+|-------|------|-------------|
+| `/` | Landing page | Static (hero + sections) |
+| `/fleet` | Fleet registry | Mirror Node (NFTs, balances) + ReputationRegistry contract |
+| `/tasks` | Task marketplace | HCS topics (tasks + bids), auto-refreshes every 10s |
+| `/proofs` | Proof stream | HCS proofs topic, auto-refreshes every 10s |
+| `/trust` | ERC-8004 registries | Mirror Node + contract queries |
+| `/demo` | Live demo | Executes real Hedera transactions from browser |
+| `/archi` | Architecture presentation | Static (scroll-spy + ReactFlow diagrams) |
 
-## React Compiler
+## Hedera Integration
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+All SDK interactions are isolated in `src/lib/`:
 
-## Expanding the ESLint configuration
+| File | Purpose |
+|------|---------|
+| `hedera-config.ts` | Reads from `VITE_*` env vars |
+| `hedera-mirror.ts` | Mirror Node REST API (fetch NFTs, tasks, proofs, balances) |
+| `hedera-contracts.ts` | Contract queries via `@hashgraph/sdk` (task state, reputation) |
+| `hedera-demo.ts` | Full demo transaction sequence |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Pages never import `@hashgraph/sdk` directly.
 
-![alt text](image.png)
-![alt text](image.png)
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Setup
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cp .env.example .env   # add your VITE_* testnet credentials
+pnpm dev               # starts at http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Build
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm build
 ```

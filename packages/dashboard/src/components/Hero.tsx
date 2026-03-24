@@ -149,7 +149,14 @@ export default function Hero() {
               The trust standard that gives robots on-chain identity, verifiable reputation,
               and multi-party proof validation — so machines can work, prove, and get paid without middlemen.
             </p>
-            <Link to="/fleet"><CornerBracketButton>Enter Dashboard</CornerBracketButton></Link>
+            <div className="flex items-center gap-4">
+              <Link to="/fleet">
+                <button className="px-8 py-3 bg-white text-black font-medium tracking-widest text-sm uppercase transition-all duration-200 hover:bg-white/90 active:scale-[0.97]">
+                  Enter Dashboard
+                </button>
+              </Link>
+              <Link to="/archi"><CornerBracketButton>Architecture</CornerBracketButton></Link>
+            </div>
           </motion.div>
 
           <div className="flex justify-between items-end w-full mt-auto">
