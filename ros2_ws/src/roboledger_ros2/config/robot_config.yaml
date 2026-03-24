@@ -1,15 +1,17 @@
 hedera:
   network: testnet
+  operator_id: "0.0.8326295"
+  operator_key: "0x676d3d780cb2fa16d83344c33473f8dbcf1ff1516e98568ffd55c8769ca510fe"
   topics:
-    tasks: "0.0.XXXXX"
-    bids: "0.0.XXXXX"
-    proofs: "0.0.XXXXX"
-  contract_id: "0.0.XXXXX"
-  nft_token_id: "0.0.XXXXX"
+    tasks: "0.0.8348079"
+    bids: "0.0.8348080"
+    proofs: "0.0.8348081"
+  contract_id: "0.0.8348193"
+  nft_token_id: "0.0.8348082"
 
 robot:
-  account_id: "0.0.XXXXX"
-  key_path: "~/.roboledger/robot.key"
+  account_id: "0.0.8348074"
+  key_path: ""
   capabilities:
     - delivery
     - outdoor
@@ -19,4 +21,4 @@ bridge:
   proof_interval_seconds: 10
   retry_attempts: 3
   retry_delay_seconds: 5
-  cli_base_path: "../../packages/cli"
+  cli_base_path: "/home/mintu-ubuntu/coding/hackalot/hedera/robo-hedera/packages/cli"
